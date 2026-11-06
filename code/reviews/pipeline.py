@@ -64,8 +64,6 @@ def sentiment_step(reviews: pd.DataFrame, cache_file: str) -> list:
 
         response = get_sentiment(review_text)
         document = response["results"]["documents"][0]
-
-
         document["review_id"] = review_id
         documents.append(document)
 
