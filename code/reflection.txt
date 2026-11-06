@@ -1,7 +1,38 @@
-Write your reflection here.
 
-See reflection.md for what makes a good reflection — be specific, use the
-terminology from this assignment (REST API, endpoint, HTTP status code,
-raise_for_status, API key, form data vs. JSON body, rate limit, caching,
-json_normalize, record_path, meta, grain, opinion mining, named-entity
-recognition, prompt, system prompt, reasoning model), and make it actionable.
+
+The biggest thing that clicked was the difference between data= and json= in
+requests. data= sends form data, which is what the Azure sentiment and entity
+recognition endpoints expect. json= turns a Python dict into a JSON body and sets
+the Content-Type header.
+I also learned why raise_for_status() matters. Without it, a bad API key or a
+wrong endpoint path comes back as a normal-looking dictionary of error text, and
+the code fails later with a KeyError that points nowhere near the real problem.
+With it, a 4xx or 5xx HTTP status code becomes an exception right
+at the API call.
+Caching each extract step was useful too. sentiment_step and entities_step save
+their JSON to cache/, and subjects_step saves a CSV. After the first run, the
+transform steps read from the cache, so I could re-run explore.py over and over
+while fixing a table without spending API calls or hitting the rate limit.
+json_normalize felt like a black box at first. I wrote sentences_table with
+nested for loops because I could see exactly where review_id came from, and the
+output worked, but the code structure test failed because it wanted
+json_normalize. Comparing the two versions helped: record_path="sentences" does
+the job of my inner loop, meta=["review_id"] copies the parent's review_id down
+like my outer loop did, and groupby("review_id").cumcount() replaces my
+sentence_id counter.
+The changes in grain were also hard to keep track of. The five test reviews
+became many sentence rows and then 14 mentions in build_mentions. Each time the
+grain changed.
+
+I relied too much on an AI assistant to write several functions.
+When I read them afterwards, I could follow the code, but I could not have
+written opinions_table myself, especially the part that reads the ref string
+("#/documents/0/sentences/1/assessments/0") to find which assessments belong to
+which target.
+
+I want to rebuild opinions_table from scratch with nested loops without using website references
+looking at my current version. After that, I will try a hybrid:
+json_normalize(documents, record_path=["sentences", "targets"],
+meta=["review_id"]) to get the targets, then work out what is still missing (the
+assessment words behind each ref). That should show me exactly where
+json_normalize stops being enough and loops are needed.
