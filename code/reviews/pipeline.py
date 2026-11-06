@@ -49,8 +49,32 @@ def sentiment_step(reviews: pd.DataFrame, cache_file: str) -> list:
     re-run on the same reviews is free either way — but your cache also works
     offline, and it is what makes the transform steps below fast to debug.
     """
-    # TODO: your code here
-    pass
+    if os.path.exists(cache_file):
+        file = open(cache_file, "r")
+        documents = json.load(file)
+        file.close()
+        return documents
+
+    # Otherwise, call the API 
+    documents = []
+    rows = reviews.to_dict("records")   # a list of dicts, one per row
+    for row in rows:
+        review_text = row["text"]
+        review_id = row["review_id"]
+
+        response = get_sentiment(review_text)
+        document = response["results"]["documents"][0]
+
+    
+        document["review_id"] = review_id
+        documents.append(document)
+
+    # Save the results 
+    file = open(cache_file, "w")
+    json.dump(documents, file)
+    file.close()
+
+    return documents
 
 
 def entities_step(reviews: pd.DataFrame, cache_file: str) -> list:
@@ -59,8 +83,29 @@ def entities_step(reviews: pd.DataFrame, cache_file: str) -> list:
     One dict per review: the Azure entity-recognition document with `review_id`
     added. Same cache rule, same loop, `get_entities` instead of `get_sentiment`.
     """
-    # TODO: your code here
-    pass
+    if os.path.exists(cache_file):
+        file = open(cache_file, "r")
+        documents = json.load(file)
+        file.close()
+        return documents
+
+    documents = []
+    rows = reviews.to_dict("records")  
+    for row in rows:
+        review_text = row["text"]
+        review_id = row["review_id"]
+
+        response = get_entities(review_text)
+        document = response["results"]["documents"][0]
+
+        document["review_id"] = review_id
+        documents.append(document)
+
+    file = open(cache_file, "w")
+    json.dump(documents, file)
+    file.close()
+
+    return documents
 
 
 def sentences_table(documents: list) -> pd.DataFrame:
@@ -77,8 +122,29 @@ def sentences_table(documents: list) -> pd.DataFrame:
     and `.cumcount()`. Keep only the six columns above. Strip the trailing space
     Azure leaves on `sentence_text` with `.str.strip()`.
     """
-    # TODO: your code here
-    pass
+    
+    rows = []
+    for document in documents:
+        review_id = document["review_id"]
+
+        # number the sentences
+        sentence_id = 0
+        for sentence in document["sentences"]:
+            row = {
+                "review_id": review_id,
+                "sentence_id": sentence_id,
+                "sentence_text": sentence["text"],
+                "sentence_sentiment": sentence["sentiment"],
+                "sentence_offset": sentence["offset"],
+                "sentence_length": sentence["length"],
+            }
+            rows.append(row)
+            sentence_id = sentence_id + 1
+
+    sentences = pd.DataFrame(rows)
+    sentences["sentence_text"] = sentences["sentence_text"].str.strip()
+
+    return sentences
 
 
 def opinions_table(documents: list) -> pd.DataFrame:
@@ -105,8 +171,38 @@ def opinions_table(documents: list) -> pd.DataFrame:
     `pd.DataFrame(rows, columns=[...the seven names...])`, so a set of reviews
     with no targets still gives a table with the right columns.
     """
-    # TODO: your code here
-    pass
+    rows = []
+    for document in documents:
+        review_id = document["review_id"]
+
+        # number the sentences
+        sentence_id = 0
+        for sentence in document["sentences"]:
+            for target in sentence["targets"]:
+
+                words = []
+                for relation in target["relations"]:
+                    if relation["relationType"] == "assessment":
+                        position = int(relation["ref"].split("/")[-1])
+                        assessment = sentence["assessments"][position]
+                        words.append(assessment["text"])
+
+                row = {
+                    "review_id": review_id,
+                    "sentence_id": sentence_id,
+                    "mention": target["text"],
+                    "mention_sentiment": target["sentiment"],
+                    "assessments": ", ".join(words),
+                    "mention_offset": target["offset"],
+                    "source": "opinion",
+                }
+                rows.append(row)
+
+            sentence_id = sentence_id + 1
+
+    columns = ["review_id", "sentence_id", "mention", "mention_sentiment",
+               "assessments", "mention_offset", "source"]
+    return pd.DataFrame(rows, columns=columns)
 
 
 def entities_table(documents: list) -> pd.DataFrame:
@@ -121,8 +217,19 @@ def entities_table(documents: list) -> pd.DataFrame:
     `.isin(MENTION_CATEGORIES)` on `entity_category`. A document with no
     entities contributes no rows, which `json_normalize` handles for you.
     """
-    # TODO: your code here
-    pass
+   
+    entities = pd.json_normalize(documents, record_path="entities",
+                                 meta=["review_id"], record_prefix="entity_")
+
+    # keep only the people and products
+    keep = entities["entity_category"].isin(MENTION_CATEGORIES)
+    entities = entities[keep]
+    columns = ["review_id", "entity_text", "entity_category", "entity_offset"]
+    entities = entities[columns]
+
+    entities = entities.reset_index(drop=True)
+
+    return entities
 
 
 def subjects_step(reviews: pd.DataFrame, mentions: pd.DataFrame,
@@ -144,5 +251,38 @@ def subjects_step(reviews: pd.DataFrame, mentions: pd.DataFrame,
     cache when the request is exactly the same, so the same reviews must
     produce the same list every time.
     """
-    # TODO: your code here
-    pass
+    if os.path.exists(cache_file):
+        subjects = pd.read_csv(cache_file)
+        return subjects
+
+    rows = []
+    for review in reviews.to_dict("records"):
+        review_id = review["review_id"]
+        review_text = review["text"]
+
+        # this review's mentions, in offset order, with no repeats
+        these = mentions[mentions["review_id"] == review_id]
+        these = these.sort_values("mention_offset")
+        mention_list = these["mention"].drop_duplicates().tolist()
+       
+        if len(mention_list) == 0:
+            continue
+
+        response = classify_mentions(review_text, mention_list)
+
+        for mention in mention_list:
+            answer = response["answers"][mention]
+            row = {
+                "review_id": review_id,
+                "mention": mention,
+                "subject": answer["choice"],
+                "subject_confidence": answer["confidence"],
+            }
+            rows.append(row)
+
+    # Save 
+    columns = ["review_id", "mention", "subject", "subject_confidence"]
+    subjects = pd.DataFrame(rows, columns=columns)
+    subjects.to_csv(cache_file, index=False)
+
+    return subjects
