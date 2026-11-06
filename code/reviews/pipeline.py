@@ -120,27 +120,20 @@ def sentences_table(documents: list) -> pd.DataFrame:
     and `.cumcount()`. Keep only the six columns above. Strip the trailing space
     Azure leaves on `sentence_text` with `.str.strip()`.
     """
+    # one row per sentence, with the review_id copied onto each row
+    sentences = pd.json_normalize(documents, record_path="sentences",
+                                  meta=["review_id"], record_prefix="sentence_")
 
-    rows = []
-    for document in documents:
-        review_id = document["review_id"]
+    # number the sentences 0, 1, 2, ... within each review
+    sentences["sentence_id"] = sentences.groupby("review_id").cumcount()
 
-        # number the sentences
-        sentence_id = 0
-        for sentence in document["sentences"]:
-            row = {
-                "review_id": review_id,
-                "sentence_id": sentence_id,
-                "sentence_text": sentence["text"],
-                "sentence_sentiment": sentence["sentiment"],
-                "sentence_offset": sentence["offset"],
-                "sentence_length": sentence["length"],
-            }
-            rows.append(row)
-            sentence_id = sentence_id + 1
-
-    sentences = pd.DataFrame(rows)
+    # remove the extra space at the end of each sentence
     sentences["sentence_text"] = sentences["sentence_text"].str.strip()
+
+    # keep only the columns we need, in this order
+    columns = ["review_id", "sentence_id", "sentence_text",
+               "sentence_sentiment", "sentence_offset", "sentence_length"]
+    sentences = sentences[columns]
 
     return sentences
 
