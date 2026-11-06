@@ -362,16 +362,18 @@ def build_messages(question: str, evidence: pd.DataFrame, limit: int = 20) -> li
 
     lines = []
     lines.append(f"Question: {question}")
-    lines.append(f"Facts: {total} mentions — {positive} positive, {negative} negative, "
-                 f"{other} neutral or mixed.")
+    lines.append(f"Facts: {total} mentions — {positive} positive, "
+                 f"{negative} negative, {other} neutral or mixed.")
 
     # one line per item, from the summary table
     lines.append("Items, most mentioned first:")
     summary = summarize_items(evidence)
     for row in summary.to_dict("records"):
         net = int(row["net"])
-        lines.append(f"- {row['item']} ({row['subject']}): {row['mentions']} mentions, "
-                     f"{row['positive']} positive, {row['negative']} negative, net {net:+d}")
+        lines.append(f"- {row['item']} ({row['subject']}): "
+                     f"{row['mentions']} mentions, "
+                     f"{row['positive']} positive, "
+                     f"{row['negative']} negative, net {net:+d}")
 
     # one line per evidence row, but no more than `limit` of them
     lines.append("Review sentences:")

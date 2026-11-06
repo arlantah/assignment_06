@@ -48,7 +48,7 @@ def get_sentiment(text: str) -> dict:
       `data=` sends a form, which is what this endpoint expects (lesson 4-2).
     - `response.raise_for_status()`, then `return response.json()`.
     """
-  
+
     url = f"{BASE_URL}/api/azure/sentiment"
     headers = {"X-API-KEY": get_api_key()}
     response = requests.post(url, headers=headers, data={"text": text})

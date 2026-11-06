@@ -55,7 +55,7 @@ def sentiment_step(reviews: pd.DataFrame, cache_file: str) -> list:
         file.close()
         return documents
 
-    # Otherwise, call the API 
+    # Otherwise, call the API
     documents = []
     rows = reviews.to_dict("records")   # a list of dicts, one per row
     for row in rows:
@@ -65,11 +65,11 @@ def sentiment_step(reviews: pd.DataFrame, cache_file: str) -> list:
         response = get_sentiment(review_text)
         document = response["results"]["documents"][0]
 
-    
+
         document["review_id"] = review_id
         documents.append(document)
 
-    # Save the results 
+    # Save the results
     file = open(cache_file, "w")
     json.dump(documents, file)
     file.close()
@@ -90,7 +90,7 @@ def entities_step(reviews: pd.DataFrame, cache_file: str) -> list:
         return documents
 
     documents = []
-    rows = reviews.to_dict("records")  
+    rows = reviews.to_dict("records")
     for row in rows:
         review_text = row["text"]
         review_id = row["review_id"]
@@ -122,7 +122,7 @@ def sentences_table(documents: list) -> pd.DataFrame:
     and `.cumcount()`. Keep only the six columns above. Strip the trailing space
     Azure leaves on `sentence_text` with `.str.strip()`.
     """
-    
+
     rows = []
     for document in documents:
         review_id = document["review_id"]
@@ -217,7 +217,7 @@ def entities_table(documents: list) -> pd.DataFrame:
     `.isin(MENTION_CATEGORIES)` on `entity_category`. A document with no
     entities contributes no rows, which `json_normalize` handles for you.
     """
-   
+
     entities = pd.json_normalize(documents, record_path="entities",
                                  meta=["review_id"], record_prefix="entity_")
 
@@ -264,7 +264,7 @@ def subjects_step(reviews: pd.DataFrame, mentions: pd.DataFrame,
         these = mentions[mentions["review_id"] == review_id]
         these = these.sort_values("mention_offset")
         mention_list = these["mention"].drop_duplicates().tolist()
-       
+
         if len(mention_list) == 0:
             continue
 
@@ -280,7 +280,7 @@ def subjects_step(reviews: pd.DataFrame, mentions: pd.DataFrame,
             }
             rows.append(row)
 
-    # Save 
+    # Save
     columns = ["review_id", "mention", "subject", "subject_confidence"]
     subjects = pd.DataFrame(rows, columns=columns)
     subjects.to_csv(cache_file, index=False)
